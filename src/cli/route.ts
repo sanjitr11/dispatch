@@ -27,6 +27,7 @@ const PATTERNS: Record<Exclude<AgentType, 'ops'>, ReadonlyArray<[string, number]
     ['write code', 3], ['write a test', 3], ['write tests', 3], ['unit test', 3],
     ['deploy', 3], ['migration', 3], ['database schema', 3],
     // Medium signals (weight 2)
+    ['fix ', 2], ['fix the', 2],
     ['code', 2], ['bug', 2], ['test', 2], ['build', 2], ['function', 2], ['class', 2],
     ['api', 2], ['endpoint', 2], ['schema', 2], ['query', 2], ['performance', 2],
     ['error', 2], ['crash', 2], ['feature', 2], ['component', 2], ['module', 2],
