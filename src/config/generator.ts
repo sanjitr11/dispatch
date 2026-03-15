@@ -9,6 +9,8 @@
  *   {projectRoot}/.claude/commands/marketing.md      /marketing slash command
  *   {projectRoot}/.claude/commands/ops.md            /ops slash command
  *   {projectRoot}/.claude/commands/route.md          /route auto-router
+ *   {projectRoot}/.claude/commands/sync.md           /sync  — populates coding agent via codebase analysis
+ *   {projectRoot}/.claude/commands/sync-research.md  /sync-research — populates research agent via web search
  *   {projectRoot}/.agent-env/agents/coding/CLAUDE.md  Coding agent context
  *   {projectRoot}/.agent-env/agents/research/CLAUDE.md Research agent context
  *   {projectRoot}/.agent-env/agents/marketing/CLAUDE.md Marketing agent context
@@ -28,6 +30,8 @@ import {
   opsAgentClaudeMd,
   codingCommand,
   researchCommand,
+  syncCommand,
+  syncResearchCommand,
   marketingCommand,
   opsCommand,
   routeCommand,
@@ -156,6 +160,8 @@ export async function generate(
     ['marketing.md', marketingCommand(ctx)],
     ['ops.md', opsCommand(ctx)],
     ['route.md', routeCommand(ctx)],
+    ['sync.md', syncCommand(ctx)],
+    ['sync-research.md', syncResearchCommand(ctx)],
   ]
 
   for (const [filename, content] of commands) {

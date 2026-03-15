@@ -34,6 +34,8 @@ delegating work via the Task tool, or invoke them directly with a slash command.
 | `/marketing` | Marketing Agent | Copy, content, messaging, positioning, pitch, launches |
 | `/ops` | Ops Agent | Planning, tooling, admin, integrations, everything else |
 | `/route` | Auto-router | Describe a task — the environment picks the right agent |
+| `/sync` | Sync | Analyze the codebase and populate the coding agent's context |
+| `/sync-research` | Sync | Research competitors and populate the research agent's context |
 
 ## Routing Rules
 - Code / architecture / debugging → `/coding`

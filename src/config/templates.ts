@@ -56,6 +56,8 @@ delegating work via the Task tool, or invoke them directly with a slash command.
 | \`/marketing\` | Marketing Agent | Copy, content, messaging, positioning, pitch, launches |
 | \`/ops\` | Ops Agent | Planning, tooling, admin, integrations, everything else |
 | \`/route\` | Auto-router | Describe a task — the environment picks the right agent |
+| \`/sync\` | Sync | Analyze the codebase and populate the coding agent's context |
+| \`/sync-research\` | Sync | Research competitors and populate the research agent's context |
 
 ## Routing Rules
 - Code / architecture / debugging → \`/coding\`
@@ -289,6 +291,145 @@ Begin by reading \`.agent-env/agents/ops/CLAUDE.md\` to load your context.
 After completing the task, append a summary to the Session Log.
 
 Task: $ARGUMENTS
+`
+}
+
+export function syncCommand(ctx: StartupContext): string {
+  return `You are updating the **Coding Agent** context for ${ctx.startupName}.
+
+**What ${ctx.startupName} does:** ${ctx.pitch}
+**Stack:** ${ctx.stack}
+
+Your job: analyze the codebase in the current directory and fill in every
+\`[POPULATED BY SYNC]\` section inside \`.agent-env/agents/coding/CLAUDE.md\`.
+Do real work — read actual files, don't summarize from memory.
+
+---
+
+## Step 1 — Map the file structure
+
+Run Glob with pattern \`**/*\` to get all files. Exclude:
+\`node_modules/**\`, \`.git/**\`, \`dist/**\`, \`build/**\`, \`.agent-env/**\`
+
+Note the top-level directories and what each one likely contains.
+
+## Step 2 — Read the entry points
+
+Read \`package.json\`. Note:
+- \`main\`, \`bin\`, \`exports\` fields (entry points)
+- \`scripts\` (how to build, test, run)
+- Key \`dependencies\` and \`devDependencies\`
+
+Read the primary entry point file(s) in full.
+If \`tsconfig.json\` exists, read it — note \`strict\`, \`module\`, \`target\`, \`paths\`.
+
+## Step 3 — Find the architectural core
+
+Use Grep to search for \`from '\` across all source files. The internal
+modules imported most frequently are the architectural core — read them.
+
+Aim to read at least 5 source files from different parts of the codebase.
+
+## Step 4 — Find the tests
+
+Glob for \`**/*.test.*\`, \`**/*.spec.*\`, \`**/__tests__/**\`.
+Read 1-2 test files. Note: framework (jest/vitest/node:test), file naming
+convention, what gets mocked vs tested directly, assertion style.
+
+## Step 5 — Write the findings
+
+Open \`.agent-env/agents/coding/CLAUDE.md\` and replace each
+\`[POPULATED BY SYNC]\` marker with real content:
+
+**Architecture Overview** — 3-5 short paragraphs. What are the main layers?
+How does a request/task flow through the system? What are the boundaries
+between modules? Name specific files and directories.
+
+**Code Conventions** — Bulleted list, specific not generic. Examples:
+- "ESM imports, .js extensions on all local imports"
+- "Errors thrown, not returned as values"
+- "No default exports — named exports only"
+- "Zod for all external input validation"
+
+**Testing Approach** — Framework, file naming pattern, what's unit-tested
+vs integration-tested, any mocking patterns used.
+
+**Key Files & Entry Points** — Markdown table: \`| path | purpose |\`
+List the 6-10 files a new developer needs to understand first.
+
+## Step 6 — Append to Session Log
+
+Add this line to the Session Log at the bottom of the coding agent file:
+\`${new Date().toISOString().slice(0, 10)}: /sync completed — architecture, conventions, testing, key files populated.\`
+
+$ARGUMENTS
+`
+}
+
+export function syncResearchCommand(ctx: StartupContext): string {
+  return `You are updating the **Research Agent** context for ${ctx.startupName}.
+
+**What ${ctx.startupName} does:** ${ctx.pitch}
+**ICP:** ${ctx.icp}
+**Stage:** ${STAGE_LABELS[ctx.stage]}
+
+Your job: research the competitive landscape and populate the empty sections
+inside \`.agent-env/agents/research/CLAUDE.md\`. Read what's already there
+first — never duplicate existing entries.
+
+---
+
+## Step 1 — Read existing context
+
+Read \`.agent-env/agents/research/CLAUDE.md\` in full. Note:
+- Which competitors are already documented
+- Which open questions are already listed
+- Which decisions have already been logged
+
+Only add new information.
+
+## Step 2 — Research direct competitors
+
+Use WebSearch to find tools that solve the same problem for the same ICP.
+Try these searches (adapt to the actual product):
+- \`"${ctx.startupName}" alternatives\`
+- \`${ctx.pitch.slice(0, 60)} tools\`
+- \`best [product category] for [ICP description] 2025\`
+
+For each competitor found, use WebFetch to get their homepage or pricing page.
+Document the ones that matter — aim for 3-6 direct competitors.
+
+## Step 3 — Research adjacent tools
+
+Search for tools that overlap but approach the problem differently — different
+ICP, different angle, different layer of the stack. These matter for
+positioning even if they're not direct competitors.
+
+## Step 4 — Write the Competitive Landscape section
+
+Open \`.agent-env/agents/research/CLAUDE.md\` and add to the
+**Competitive Landscape** section. Format each competitor as:
+
+\`\`\`
+### [Competitor Name]
+[One-line description] | [Pricing model] | [Target customer]
+
+**Strengths:** [what they do well]
+**Weaknesses:** [their gap — the opening for ${ctx.startupName}]
+**vs ${ctx.startupName}:** [key differentiator]
+\`\`\`
+
+## Step 5 — Update Open Questions
+
+Based on what you found, append 2-3 new questions worth investigating.
+Format: \`- [Question]?\`
+
+## Step 6 — Append to Session Log
+
+Add this line to the Session Log:
+\`${new Date().toISOString().slice(0, 10)}: /sync-research completed — competitive landscape populated.\`
+
+$ARGUMENTS
 `
 }
 
