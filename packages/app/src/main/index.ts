@@ -35,11 +35,9 @@ async function main() {
 
   const today = new Date().toISOString().slice(0, 10)
   const sessionLogIdx = claudeMd.indexOf('## Session Log')
-  if (sessionLogIdx !== -1 && claudeMd.slice(sessionLogIdx).includes(today)) {
-    process.exit(0) // Claude already self-reported
-  }
 
-  let summary = 'session occurred'
+  // Parse transcript and build summary. Exit silently if no real work was done.
+  let summary = null
   if (transcript_path) {
     try {
       const lines = readFileSync(transcript_path, 'utf-8').split('\\n').filter(Boolean)
@@ -68,10 +66,13 @@ async function main() {
         parts.push('ran: ' + commands[0] + (extra > 0 ? \` (+\${extra} more)\` : ''))
       }
       if (parts.length) summary = parts.join('; ')
-    } catch { /* transcript parse failed — use fallback */ }
+    } catch { /* transcript parse failed — skip */ }
   }
 
-  const entry = today + ': ' + summary
+  // No real tool-use work detected — exit without writing anything.
+  if (!summary) process.exit(0)
+
+  const entry = today + ': ' + (summary as string)
   const hintPattern = '*(append: \`YYYY-MM-DD: [one-line summary of what was done]\`)*'
   let updated
   if (sessionLogIdx !== -1) {

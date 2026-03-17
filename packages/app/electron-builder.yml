@@ -1,0 +1,37 @@
+appId: com.agentenv.app
+productName: agent-env
+directories:
+  output: dist
+  buildResources: build
+files:
+  - out/**/*
+  - node_modules/**/*
+  - package.json
+mac:
+  category: public.app-category.developer-tools
+  # TODO: add build/icon.icns for production releases
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+dmg:
+  title: agent-env
+  contents:
+    - x: 410
+      y: 150
+      type: link
+      path: /Applications
+    - x: 130
+      y: 150
+      type: file
+win:
+  target: nsis
+  # TODO: add build/icon.ico for production releases
+linux:
+  target: AppImage
+  # TODO: add build/icon.png for production releases
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+afterSign: scripts/notarize.cjs
