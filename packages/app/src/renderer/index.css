@@ -1,0 +1,20 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .input {
+    @apply w-full rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:border-transparent;
+    background-color: #1c1c22;
+    border: 1px solid #26262f;
+    color: #ededf0;
+  }
+  .input::placeholder {
+    color: #55556a;
+  }
+  .input:focus {
+    --tw-ring-color: #7c5af6;
+  }
+}
