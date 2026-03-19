@@ -52,3 +52,23 @@ _Last updated: 2026-03-18_
 - `agent-env sync` triggered automatically on app launch if context is stale
 - Multi-window support (open two agents side by side)
 - Packaging: notarization + auto-update (Squirrel)
+
+---
+
+## Future: MCP External Tool Integrations
+
+Let agents connect to external platforms via MCP servers. On session boot,
+inject active integrations into the agent's `.claude/settings.json` so Claude
+Code sees them as native tools — no copy-paste, agents can actually post/create/query.
+
+**Default integrations by agent type:**
+- Marketing → Reddit, Twitter/X, LinkedIn
+- Coding → GitHub
+- Research → Brave Search, Exa
+- Ops → Linear, Notion, Slack
+
+**Implementation sketch:**
+- `agent_integrations` table in Supabase (agent_id, type, config JSON)
+- "Connect tools" UI on each agent in the workspace sidebar
+- OAuth2 flows handled in Electron via `protocol.handle`
+- `writeClaudeMd` extended to merge active MCP server configs into `settings.json`
