@@ -2,10 +2,11 @@
  * agent-env CLI entry point
  *
  * Usage:
- *   agent-env init              Initialize a new agent environment
- *   agent-env sync              Regenerate configs from stored context
- *   agent-env route <task>      Route a task to the correct agent
- *   agent-env status            Show current startup context
+ *   agent-env init                    Initialize a new agent environment
+ *   agent-env sync                    Regenerate configs from stored context
+ *   agent-env update [field]          Update startup context fields without re-init
+ *   agent-env route <task>            Route a task to the correct agent
+ *   agent-env status                  Show current startup context
  */
 
 // Suppress node:sqlite ExperimentalWarning before any imports touch sqlite.
@@ -27,6 +28,7 @@ const { join, resolve } = await import('path')
 const { default: pc } = await import('picocolors')
 const { runInit } = await import('../src/cli/init.js')
 const { runSync } = await import('../src/cli/sync.js')
+const { runUpdate } = await import('../src/cli/update.js')
 const { route, formatRoutingDecision } = await import('../src/cli/route.js')
 const { openDb, closeDb, loadStartupContext, STAGE_LABELS } = await import('@agent-env/shared')
 
@@ -42,6 +44,12 @@ async function main(): Promise<void> {
 
     case 'sync': {
       await runSync(projectRoot)
+      break
+    }
+
+    case 'update': {
+      const field = cliArgs[0] ?? undefined
+      await runUpdate(projectRoot, field)
       break
     }
 
@@ -90,10 +98,11 @@ async function main(): Promise<void> {
       console.log(pc.bold('agent-env') + pc.dim(' — persistent agent environment for startups'))
       console.log('')
       console.log('Commands:')
-      console.log(`  ${pc.cyan('init')}          Initialize a new agent environment in the current directory`)
-      console.log(`  ${pc.cyan('sync')}          Regenerate configs from stored startup context`)
-      console.log(`  ${pc.cyan('route')} <task>  Route a task to the correct agent`)
-      console.log(`  ${pc.cyan('status')}        Show current startup context`)
+      console.log(`  ${pc.cyan('init')}                 Initialize a new agent environment in the current directory`)
+      console.log(`  ${pc.cyan('sync')}                 Regenerate configs from stored startup context`)
+      console.log(`  ${pc.cyan('update')} [field]       Update startup context fields without re-init`)
+      console.log(`  ${pc.cyan('route')} <task>         Route a task to the correct agent`)
+      console.log(`  ${pc.cyan('status')}               Show current startup context`)
       console.log('')
       console.log('Examples:')
       console.log(`  agent-env init`)

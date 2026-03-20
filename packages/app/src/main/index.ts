@@ -11,6 +11,49 @@ const __dirname = dirname(__filename)
 
 const execAsync = promisify(exec)
 
+// ── Pre-tool-use hook script (written to .agent-env/hooks/pre-tool-use.mjs) ──────
+// Blocks destructive Bash commands before they run. Claude Code calls this hook
+// before every Bash tool invocation; returning a non-zero exit code blocks the call.
+const PRE_TOOL_USE_HOOK = `#!/usr/bin/env node
+// pre-tool-use.mjs — PreToolUse hook for agent-env projects.
+// Blocks a short list of high-blast-radius commands before Claude can run them.
+import { readFileSync } from 'node:fs'
+
+async function main() {
+  let inputData = ''
+  for await (const chunk of process.stdin) inputData += chunk
+
+  let hookInput
+  try { hookInput = JSON.parse(inputData) } catch { process.exit(0) }
+
+  const { tool_name, tool_input } = hookInput ?? {}
+  if (tool_name !== 'Bash') process.exit(0)
+
+  const cmd = String(tool_input?.command ?? '').trim()
+
+  const BLOCKED = [
+    /rm\\s+-rf\\s+[\\/~]/,          // rm -rf / or ~/
+    /curl[^|]*\\|\\s*bash/,          // curl | bash
+    /wget[^|]*\\|\\s*bash/,          // wget | bash
+    /:\\s*\\(\\s*\\)\\s*\\{.*\\}\\s*;\\s*:/,  // fork bomb
+    /dd\\s+.*of=\\/dev\\/(s|h|nv)d/, // dd to a raw disk device
+  ]
+
+  for (const pattern of BLOCKED) {
+    if (pattern.test(cmd)) {
+      process.stdout.write(JSON.stringify({
+        decision: 'block',
+        reason: \`Blocked by agent-env pre-tool-use hook: \${pattern.toString()}\`,
+      }))
+      process.exit(0)
+    }
+  }
+
+  process.exit(0)
+}
+main().catch(() => process.exit(0))
+`
+
 // ── Post-session Stop hook script (written to .agent-env/hooks/post-session.mjs) ──
 const POST_SESSION_HOOK = `#!/usr/bin/env node
 // post-session.mjs — Stop hook for accumulating agent session memory.
@@ -108,6 +151,12 @@ const CLAUDE_SETTINGS = {
     deny: ['Bash(rm -rf *)', 'Bash(curl * | bash)', 'Bash(wget * | bash)'],
   },
   hooks: {
+    PreToolUse: [
+      {
+        matcher: 'Bash',
+        hooks: [{ type: 'command', command: 'node .agent-env/hooks/pre-tool-use.mjs' }],
+      },
+    ],
     Stop: [{ hooks: [{ type: 'command', command: 'node .agent-env/hooks/post-session.mjs' }] }],
   },
 }
@@ -155,6 +204,7 @@ function createWindow(): void {
   ipcMain.handle('project:writeClaudeMd', async (_event, opts: {
     cwd: string
     content: string
+    mcpServers?: Record<string, { command: string; args: string[]; env: Record<string, string> }>
   }) => {
     await mkdir(opts.cwd, { recursive: true })
 
@@ -181,15 +231,19 @@ function createWindow(): void {
 
     await writeFile(join(opts.cwd, 'CLAUDE.md'), newContent, 'utf-8')
 
-    // 2. Write Stop hook script
+    // 2. Write hook scripts
     const hooksDir = join(opts.cwd, '.agent-env', 'hooks')
     await mkdir(hooksDir, { recursive: true })
+    await writeFile(join(hooksDir, 'pre-tool-use.mjs'), PRE_TOOL_USE_HOOK, 'utf-8')
     await writeFile(join(hooksDir, 'post-session.mjs'), POST_SESSION_HOOK, 'utf-8')
 
-    // 3. Write .claude/settings.json
+    // 3. Write .claude/settings.json (merging active MCP server configs if provided)
     const claudeDir = join(opts.cwd, '.claude')
     await mkdir(claudeDir, { recursive: true })
-    await writeFile(join(claudeDir, 'settings.json'), JSON.stringify(CLAUDE_SETTINGS, null, 2), 'utf-8')
+    const settings = opts.mcpServers && Object.keys(opts.mcpServers).length > 0
+      ? { ...CLAUDE_SETTINGS, mcpServers: opts.mcpServers }
+      : CLAUDE_SETTINGS
+    await writeFile(join(claudeDir, 'settings.json'), JSON.stringify(settings, null, 2), 'utf-8')
 
     // 4. Ensure .agentenv/ is in the project root's .gitignore
     // opts.cwd is <project_root>/.agentenv/<agent-slug>

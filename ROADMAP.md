@@ -1,74 +1,72 @@
 # agent-env Roadmap
 
-_Last updated: 2026-03-18_
+_Last updated: 2026-03-20_
 
-## Next up (ship these before distributing)
+## Completed
 
-1. **Fix multi-agent input bug** — `terminal:input` always routes keystrokes to the last
-   pty in the map, not the focused one. Two agents open simultaneously = second agent
-   can't type. Fix: pass `projectId` alongside input data so the main process routes
-   to the correct pty.
-
-2. **Edit project** — no way to update startup context (stage, priorities, stack) after
-   init. Users will hit this immediately when their context shifts. Add an edit form
-   on the project detail page.
-
-3. **"Sync" button in the agent UI** — `/sync` currently requires the user to manually
-   run the slash command. Surface it as a button on the agent detail page so context
-   refresh is one click.
-
-4. **Package the DMG** — the app isn't packaged for distribution yet. Run electron-builder
-   for both x64 and arm64 targets. Required before handing it to anyone.
+- ~~**Fix multi-agent input bug**~~ — pty keyed by `agent.id`; input, output, resize, kill all route correctly.
+- ~~**Edit project**~~ — `EditProjectPage` complete, routed at `/projects/:id/edit`, linked from workspace sidebar.
+- ~~**"Sync" button in the agent UI**~~ — button in workspace panel header for coding agents.
+- ~~**Package the DMG**~~ — `dist/agent-env-0.1.0.dmg` (x64) and `dist/agent-env-0.1.0-arm64.dmg` built. No code signing; recipients must right-click → Open.
 
 ---
 
-## Medium priority (next sprint)
+## Next up
 
-5. **Session log viewer** — the Session Log in CLAUDE.md accumulates per agent, but
-   there's no UI to read it. Show it in the agent detail page so founders can see
-   what their agents did across sessions.
+- ~~**Session log viewer**~~ — rendered in `AgentDetailPage` (parsed from CLAUDE.md `## Session Log` section).
+- ~~**Agent memory viewer**~~ — collapsible CLAUDE.md viewer on `AgentDetailPage`.
+- ~~**Fix `terminal:output` fan-out**~~ — preload already filters by `projectId`; main sends only to `win.webContents` (single window).
 
-6. **`agent-env update` CLI command** — update individual startup context fields
-   (e.g. priorities, stage) without running full re-init. Useful mid-sprint.
-
-7. **Agent memory viewer** — display the full CLAUDE.md content in the app, especially
-   the Session Log section. Founders shouldn't need to open files manually.
+- ~~**`agent-env update` CLI command**~~ — interactive multiselect or `agent-env update <field>` for direct field targeting; auto-syncs after save.
 
 8. **In-app onboarding** — new users land on an empty projects list with no guidance.
    Add a welcome state that walks them through creating their first project.
 
-9. **Fix `terminal:output` fan-out** — output events broadcast to all windows; if two
-   agents are open in separate pages they'll see each other's output. Route output
-   by projectId.
-
-10. **`/route` entry point in the app** — a task input box on the project detail page
-    that routes to the right agent automatically, without the user picking manually.
+- ~~**`/route` entry point in the app**~~ — "Route a task…" input in workspace sidebar; keyword-scores the task and selects the right agent with a reason shown for 4 seconds.
 
 ---
 
 ## Lower priority / later
 
-- Pre-tool-use hook generated for user projects (not just agent-env itself)
-- `agent-env sync` triggered automatically on app launch if context is stale
-- Multi-window support (open two agents side by side)
-- Packaging: notarization + auto-update (Squirrel)
+- ~~**Pre-tool-use hook for user projects**~~ — `pre-tool-use.mjs` written on session boot; blocks `rm -rf /`, `curl|bash`, `wget|bash`, fork bombs, and `dd` to raw devices.
+- ~~**Auto-sync on app launch**~~ — already handled: every terminal boot calls `writeClaudeMd` from live Supabase state, so context is never stale.
+- ~~**Multi-window support**~~ — split view in workspace: hover any non-active agent in the sidebar to reveal ⊞, click to open side by side. Split header shows both agents' status with ✕ to close.
+- **Packaging: notarization + auto-update (Squirrel)** — requires Apple Developer certificate. Stub is in place (`scripts/notarize.cjs`). Deferred until production release.
 
 ---
 
-## Future: MCP External Tool Integrations
+## MCP External Tool Integrations
 
-Let agents connect to external platforms via MCP servers. On session boot,
-inject active integrations into the agent's `.claude/settings.json` so Claude
-Code sees them as native tools — no copy-paste, agents can actually post/create/query.
+~~**V1 shipped (API-key-based):**~~
+- Coding → GitHub (`@modelcontextprotocol/server-github`)
+- Research → Brave Search (`@modelcontextprotocol/server-brave-search`), Exa (`exa-mcp-server`)
+- Ops → Linear (`linear-mcp-server`), Slack (`@modelcontextprotocol/server-slack`), Notion (`@notionhq/notion-mcp-server`)
 
-**Default integrations by agent type:**
-- Marketing → Reddit, Twitter/X, LinkedIn
-- Coding → GitHub
-- Research → Brave Search, Exa
-- Ops → Linear, Notion, Slack
+**Requires one-time Supabase migration** — run in SQL editor:
+```sql
+CREATE TABLE agent_integrations (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  agent_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  type text NOT NULL,
+  config jsonb NOT NULL DEFAULT '{}',
+  enabled boolean NOT NULL DEFAULT true,
+  created_at timestamptz DEFAULT now(),
+  UNIQUE(agent_id, type)
+);
+ALTER TABLE agent_integrations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users manage their own integrations"
+  ON agent_integrations FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+```
 
-**Implementation sketch:**
-- `agent_integrations` table in Supabase (agent_id, type, config JSON)
-- "Connect tools" UI on each agent in the workspace sidebar
-- OAuth2 flows handled in Electron via `protocol.handle`
-- `writeClaudeMd` extended to merge active MCP server configs into `settings.json`
+**V2 — Marketing agent integrations (next up):**
+- **Reddit** — Composio MCP, free API. Post to subreddits, monitor mentions, community engagement.
+- **Resend** — API key MCP. Send outreach/transactional emails directly from the agent.
+- **Stripe** — official Anthropic MCP. Pull MRR, churn, customer data for marketing decisions.
+- **Fetch** — official Anthropic MCP, zero auth. Pull any webpage for competitor/web research.
+
+**V3 — OAuth-based (deferred):**
+- Twitter/X — $100/month API minimum, not worth it for solo founders
+- LinkedIn — API too restrictive, post-only, limited value

@@ -27,3 +27,19 @@ export interface Project {
 }
 
 export type ProjectFormData = Omit<Project, 'id' | 'user_id' | 'version' | 'created_at' | 'updated_at' | 'local_path'>
+
+export interface Integration {
+  id: string
+  agent_id: string
+  user_id: string
+  type: string
+  config: Record<string, string>  // API keys / tokens — stored in Supabase behind RLS
+  enabled: boolean
+  created_at: string
+}
+
+export interface McpServerConfig {
+  command: string
+  args: string[]
+  env: Record<string, string>
+}

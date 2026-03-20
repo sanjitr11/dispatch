@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { AGENT_META } from '../lib/agentMeta'
 import { agentSlug } from '../lib/buildClaudeMd'
+import { routeTask } from '../lib/router'
 import type { Project, Agent } from '../lib/types'
 import TerminalPanel, { type TerminalStatus } from '../components/TerminalPanel'
 
@@ -39,6 +40,13 @@ export default function ProjectWorkspacePage() {
   const [agentStatuses, setAgentStatuses] = useState<Record<string, TerminalStatus>>({})
   // Agents with unread output
   const [unreadAgentIds, setUnreadAgentIds] = useState<Set<string>>(new Set())
+  // Split view — second agent pinned alongside active
+  const [splitAgentId, setSplitAgentId] = useState<string | null>(null)
+  // Task router
+  const [taskInput, setTaskInput] = useState('')
+  const [routeReason, setRouteReason] = useState<string | null>(null)
+  const routeReasonTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const taskInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!id) return
@@ -67,8 +75,35 @@ export default function ProjectWorkspacePage() {
   }
 
   function handleUnreadOutput(agentId: string) {
-    if (agentId === activeAgentId) return
+    if (agentId === activeAgentId || agentId === splitAgentId) return
     setUnreadAgentIds((prev) => new Set([...prev, agentId]))
+  }
+
+  function toggleSplit(agentId: string) {
+    if (splitAgentId === agentId) {
+      setSplitAgentId(null)
+    } else {
+      setSplitAgentId(agentId)
+      setOpenedAgentIds((prev) => new Set([...prev, agentId]))
+      setUnreadAgentIds((prev) => {
+        const next = new Set(prev)
+        next.delete(agentId)
+        return next
+      })
+    }
+  }
+
+  function handleRouteTask(e: React.FormEvent) {
+    e.preventDefault()
+    const trimmed = taskInput.trim()
+    if (!trimmed) return
+    const result = routeTask(trimmed, agents)
+    if (!result) return
+    selectAgent(result.agent.id)
+    setTaskInput('')
+    if (routeReasonTimer.current) clearTimeout(routeReasonTimer.current)
+    setRouteReason(result.reason)
+    routeReasonTimer.current = setTimeout(() => setRouteReason(null), 4000)
   }
 
   async function handleLinkFolder() {
@@ -144,7 +179,16 @@ export default function ProjectWorkspacePage() {
             )}
           </div>
 
-          <div className="mt-3">
+          <div className="mt-2">
+            <Link
+              to={`/projects/${id}/edit`}
+              className="text-[10px] text-gray-600 hover:text-gray-400 transition-colors"
+            >
+              Edit project
+            </Link>
+          </div>
+
+          <div className="mt-2">
             {confirmDelete ? (
               <div className="flex items-center gap-2">
                 <span className="text-[10px] text-gray-500">Sure?</span>
@@ -186,38 +230,73 @@ export default function ProjectWorkspacePage() {
           ) : (
             agents.map((agent) => {
               const isActive = agent.id === activeAgentId
+              const isSplit = agent.id === splitAgentId
               const status = agentStatuses[agent.id]
               const hasUnread = unreadAgentIds.has(agent.id)
               const dotColor = status ? STATUS_DOT[status] : 'text-gray-600'
 
               return (
-                <button
+                <div
                   key={agent.id}
-                  onClick={() => selectAgent(agent.id)}
-                  className={`w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors ${
-                    isActive
-                      ? 'bg-[#161b22] text-gray-100'
-                      : 'text-gray-400 hover:bg-[#161b22] hover:text-gray-200'
+                  className={`flex items-center gap-1 px-3 py-1.5 group transition-colors ${
+                    isActive || isSplit
+                      ? 'bg-[#161b22]'
+                      : 'hover:bg-[#161b22]'
                   }`}
                 >
-                  {/* Status dot — only shown once started */}
-                  {status ? (
-                    <span className={`text-[8px] ${dotColor}`}>●</span>
-                  ) : (
-                    <span className="w-[10px]" />
-                  )}
-                  <span className="text-xs flex-1 truncate">{agent.name}</span>
+                  {/* Select agent */}
+                  <button
+                    onClick={() => selectAgent(agent.id)}
+                    className={`flex items-center gap-2 flex-1 min-w-0 text-left ${
+                      isActive ? 'text-gray-100' : 'text-gray-400 hover:text-gray-200'
+                    }`}
+                  >
+                    {status ? (
+                      <span className={`text-[8px] shrink-0 ${dotColor}`}>●</span>
+                    ) : (
+                      <span className="w-[10px] shrink-0" />
+                    )}
+                    <span className="text-xs truncate">{agent.name}</span>
+                  </button>
                   {hasUnread && (
                     <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" title="Unread output" />
                   )}
-                </button>
+                  {/* Split toggle — only show when there's an active agent and this isn't it */}
+                  {activeAgentId && !isActive && (
+                    <button
+                      onClick={() => toggleSplit(agent.id)}
+                      className={`text-[9px] shrink-0 opacity-0 group-hover:opacity-100 transition-opacity ${
+                        isSplit ? 'text-blue-400 opacity-100' : 'text-gray-600'
+                      }`}
+                      title={isSplit ? 'Close split' : 'Open in split view'}
+                    >
+                      {isSplit ? '✕' : '⊞'}
+                    </button>
+                  )}
+                </div>
               )
             })
           )}
         </div>
 
-        {/* Add agent */}
+        {/* Route a task */}
         <div className="px-3 py-3 border-t border-[#21262d]">
+          <form onSubmit={handleRouteTask}>
+            <input
+              ref={taskInputRef}
+              value={taskInput}
+              onChange={(e) => setTaskInput(e.target.value)}
+              placeholder="Route a task…"
+              className="w-full bg-[#161b22] border border-[#30363d] rounded px-2 py-1 text-xs text-gray-300 placeholder-gray-600 focus:outline-none focus:border-gray-500"
+            />
+          </form>
+          {routeReason && (
+            <p className="mt-1.5 text-[10px] text-gray-500 leading-snug">{routeReason}</p>
+          )}
+        </div>
+
+        {/* Add agent */}
+        <div className="px-3 py-2 border-t border-[#21262d]">
           <Link
             to={`/projects/${id}/agents/new`}
             className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
@@ -230,50 +309,78 @@ export default function ProjectWorkspacePage() {
       {/* ── Main panel ── */}
       <div className="flex flex-col flex-1 min-w-0">
         {/* Panel header */}
-        <div className="flex items-center gap-3 px-4 py-2 bg-[#161b22] border-b border-[#21262d] shrink-0">
-          {activeAgent ? (
-            <>
-              <span className="text-sm font-medium text-gray-200">{activeAgent.name}</span>
-              {agentStatuses[activeAgent.id] && (
-                <span className={`text-xs ${STATUS_DOT[agentStatuses[activeAgent.id]]}`}>
-                  ● {agentStatuses[activeAgent.id]}
-                </span>
-              )}
-              <div className="ml-auto flex items-center gap-2">
-                {activeAgent.type === 'coding' && (
-                  <button
-                    onClick={() => {
-                      /* Sync sends /sync to the active terminal — handled by autoCmd on boot.
-                         For post-boot, we need to send input directly. */
-                      window.electronAPI.terminalInput(activeAgent.id, '/sync\r')
-                    }}
-                    className="text-xs text-gray-500 hover:text-gray-300 border border-[#30363d] px-2.5 py-1 rounded transition-colors"
-                  >
-                    Sync
-                  </button>
+        <div className="flex items-center bg-[#161b22] border-b border-[#21262d] shrink-0 divide-x divide-[#21262d]">
+          {/* Primary agent header */}
+          <div className="flex items-center gap-3 px-4 py-2 flex-1 min-w-0">
+            {activeAgent ? (
+              <>
+                <span className="text-sm font-medium text-gray-200 truncate">{activeAgent.name}</span>
+                {agentStatuses[activeAgent.id] && (
+                  <span className={`text-xs shrink-0 ${STATUS_DOT[agentStatuses[activeAgent.id]]}`}>
+                    ● {agentStatuses[activeAgent.id]}
+                  </span>
                 )}
-                {/* Expand to full-screen */}
-                <button
-                  onClick={() =>
-                    navigate(`/projects/${id}/agents/${activeAgent.id}/terminal`)
-                  }
-                  className="text-xs text-gray-500 hover:text-gray-300 border border-[#30363d] px-2 py-1 rounded transition-colors"
-                  title="Expand to full screen"
-                >
-                  ⛶
-                </button>
+                <div className="ml-auto flex items-center gap-2 shrink-0">
+                  {activeAgent.type === 'coding' && (
+                    <button
+                      onClick={() => window.electronAPI.terminalInput(activeAgent.id, '/sync\r')}
+                      className="text-xs text-gray-500 hover:text-gray-300 border border-[#30363d] px-2.5 py-1 rounded transition-colors"
+                    >
+                      Sync
+                    </button>
+                  )}
+                  <Link
+                    to={`/projects/${id}/agents/${activeAgent.id}`}
+                    className="text-xs text-gray-500 hover:text-gray-300 border border-[#30363d] px-2 py-1 rounded transition-colors"
+                    title="Agent settings & connected tools"
+                  >
+                    ⚙
+                  </Link>
+                  <button
+                    onClick={() => navigate(`/projects/${id}/agents/${activeAgent.id}/terminal`)}
+                    className="text-xs text-gray-500 hover:text-gray-300 border border-[#30363d] px-2 py-1 rounded transition-colors"
+                    title="Expand to full screen"
+                  >
+                    ⛶
+                  </button>
+                </div>
+              </>
+            ) : (
+              <span className="text-sm text-gray-600">Select an agent to start a session</span>
+            )}
+          </div>
+
+          {/* Split agent header — only shown when split is active */}
+          {splitAgentId && (() => {
+            const splitAgent = agents.find((a) => a.id === splitAgentId)
+            if (!splitAgent) return null
+            return (
+              <div className="flex items-center gap-3 px-4 py-2 flex-1 min-w-0">
+                <span className="text-sm font-medium text-gray-200 truncate">{splitAgent.name}</span>
+                {agentStatuses[splitAgent.id] && (
+                  <span className={`text-xs shrink-0 ${STATUS_DOT[agentStatuses[splitAgent.id]]}`}>
+                    ● {agentStatuses[splitAgent.id]}
+                  </span>
+                )}
+                <div className="ml-auto flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => setSplitAgentId(null)}
+                    className="text-xs text-gray-500 hover:text-gray-300 border border-[#30363d] px-2 py-1 rounded transition-colors"
+                    title="Close split"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
-            </>
-          ) : (
-            <span className="text-sm text-gray-600">Select an agent to start a session</span>
-          )}
+            )
+          })()}
         </div>
 
         {/* Terminal area */}
-        <div className="flex-1 relative overflow-hidden">
+        <div className="flex-1 flex overflow-hidden">
           {/* No-selection placeholder */}
           {!activeAgentId && (
-            <div className="absolute inset-0 flex items-center justify-center">
+            <div className="flex-1 flex items-center justify-center">
               <div className="text-center">
                 <p className="text-gray-600 text-sm mb-1">No agent selected</p>
                 <p className="text-gray-700 text-xs">
@@ -285,7 +392,7 @@ export default function ProjectWorkspacePage() {
 
           {/* Missing folder prompt — show if no local_path and an agent is selected */}
           {activeAgentId && !project.local_path && (
-            <div className="absolute inset-0 flex items-center justify-center bg-[#0d1117]">
+            <div className="flex-1 flex items-center justify-center bg-[#0d1117]">
               <div className="text-center">
                 <p className="text-gray-400 text-sm mb-3">
                   Link a local folder to start a session.
@@ -301,20 +408,26 @@ export default function ProjectWorkspacePage() {
             </div>
           )}
 
-          {/* Render a TerminalPanel for each opened agent — CSS hide/show, never unmount */}
+          {/* Render a TerminalPanel for each opened agent — CSS hide/show, never unmount.
+              In split mode both active + split panels are visible side by side. */}
           {project.local_path &&
             agents
               .filter((a) => openedAgentIds.has(a.id))
-              .map((agent) => (
-                <TerminalPanel
-                  key={agent.id}
-                  project={project}
-                  agent={agent}
-                  visible={agent.id === activeAgentId}
-                  onStatusChange={handleStatusChange}
-                  onUnreadOutput={handleUnreadOutput}
-                />
-              ))}
+              .map((agent) => {
+                const isVisible = agent.id === activeAgentId || agent.id === splitAgentId
+                const inSplit = isVisible && splitAgentId !== null
+                return (
+                  <TerminalPanel
+                    key={agent.id}
+                    project={project}
+                    agent={agent}
+                    visible={isVisible}
+                    className={inSplit ? 'flex-1' : 'w-full'}
+                    onStatusChange={handleStatusChange}
+                    onUnreadOutput={handleUnreadOutput}
+                  />
+                )
+              })}
         </div>
       </div>
     </div>

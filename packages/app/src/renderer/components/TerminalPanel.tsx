@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { buildClaudeMd, agentCwd } from '../lib/buildClaudeMd'
-import type { Project, Agent } from '../lib/types'
+import { buildMcpServers } from '../lib/integrations'
+import { supabase } from '../lib/supabase'
+import type { Project, Agent, Integration } from '../lib/types'
 import '@xterm/xterm/css/xterm.css'
 
 export type TerminalStatus = 'starting' | 'running' | 'exited' | 'error'
@@ -12,6 +14,7 @@ interface Props {
   agent: Agent
   visible: boolean
   autoCmd?: string
+  className?: string
   onStatusChange: (agentId: string, status: TerminalStatus) => void
   onUnreadOutput: (agentId: string) => void
 }
@@ -21,6 +24,7 @@ export default function TerminalPanel({
   agent,
   visible,
   autoCmd,
+  className,
   onStatusChange,
   onUnreadOutput,
 }: Props) {
@@ -89,10 +93,16 @@ export default function TerminalPanel({
         return
       }
 
-      // 3. Write CLAUDE.md to the agent subfolder
+      // 3. Write CLAUDE.md + settings.json (with active MCP servers) to the agent subfolder
       const cwd = agentCwd(project.local_path!, agent.name)
       const claudeMd = buildClaudeMd(project, agent)
-      await api.writeClaudeMd({ cwd, content: claudeMd })
+      const { data: integrationsData } = await supabase
+        .from('agent_integrations')
+        .select('*')
+        .eq('agent_id', agent.id)
+        .eq('enabled', true)
+      const mcpServers = buildMcpServers((integrationsData ?? []) as Integration[])
+      await api.writeClaudeMd({ cwd, content: claudeMd, mcpServers })
 
       // 4. Mount xterm
       const term = new Terminal({
@@ -165,7 +175,7 @@ export default function TerminalPanel({
   }
 
   return (
-    <div className="flex flex-col h-full" style={{ display: visible ? 'flex' : 'none' }}>
+    <div className={`flex flex-col h-full ${className ?? ''}`} style={{ display: visible ? 'flex' : 'none' }}>
       {status === 'error' ? (
         <div className="flex-1 flex items-center justify-center">
           <p className="text-red-400 text-sm">{errorMsg}</p>

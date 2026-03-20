@@ -15,8 +15,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkClaude: (): Promise<boolean> =>
     ipcRenderer.invoke('claude:check'),
 
-  // Write CLAUDE.md to the project directory
-  writeClaudeMd: (opts: { cwd: string; content: string }): Promise<void> =>
+  // Write CLAUDE.md to the project directory (optionally injecting MCP server configs)
+  writeClaudeMd: (opts: {
+    cwd: string
+    content: string
+    mcpServers?: Record<string, { command: string; args: string[]; env: Record<string, string> }>
+  }): Promise<void> =>
     ipcRenderer.invoke('project:writeClaudeMd', opts),
 
   // Start a pty session running claude in the given directory
