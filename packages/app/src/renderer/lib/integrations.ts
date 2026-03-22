@@ -54,6 +54,38 @@ export const INTEGRATION_DEFS: IntegrationDef[] = [
     }),
   },
 
+  {
+    type: 'supabase',
+    label: 'Supabase',
+    description: 'Query databases, run migrations, manage tables and RLS policies directly from Claude.',
+    docsUrl: 'https://supabase.com/docs/guides/getting-started/mcp',
+    agentTypes: ['coding'],
+    fields: [
+      {
+        key: 'SUPABASE_ACCESS_TOKEN',
+        label: 'Personal Access Token',
+        placeholder: 'sbp_…',
+        hint: 'supabase.com/dashboard/account/tokens → Generate new token',
+        secret: true,
+      },
+      {
+        key: 'project_ref',
+        label: 'Project Ref (optional)',
+        placeholder: 'abcdefghijklmnop',
+        hint: 'Scopes the MCP to one project. Found in your project URL: supabase.co/dashboard/project/<ref>',
+      },
+    ],
+    toMcpServer: (config) => {
+      const args = ['-y', '@supabase/mcp-server-supabase']
+      if (config['project_ref']?.trim()) args.push('--project-ref', config['project_ref'].trim())
+      return {
+        command: 'npx',
+        args,
+        env: { SUPABASE_ACCESS_TOKEN: config['SUPABASE_ACCESS_TOKEN'] ?? '' },
+      }
+    },
+  },
+
   // ── Research ──────────────────────────────────────────────────────────────
   {
     type: 'brave-search',
