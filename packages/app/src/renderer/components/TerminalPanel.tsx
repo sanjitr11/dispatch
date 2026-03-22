@@ -101,7 +101,15 @@ export default function TerminalPanel({
         .select('*')
         .eq('agent_id', agent.id)
         .eq('enabled', true)
-      const mcpServers = buildMcpServers((integrationsData ?? []) as Integration[])
+      // Fetch is zero-auth — always available for web research/competitor analysis
+      const mcpServers = {
+        fetch: {
+          command: 'npx',
+          args: ['-y', '@modelcontextprotocol/server-fetch'],
+          env: {},
+        },
+        ...buildMcpServers((integrationsData ?? []) as Integration[]),
+      }
       await api.writeClaudeMd({ cwd, content: claudeMd, mcpServers })
 
       // 4. Mount xterm

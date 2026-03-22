@@ -6,8 +6,8 @@
  *  - what credentials are needed (shown as form fields)
  *  - how to build the MCP server config that goes into .claude/settings.json
  *
- * V1: API-key-based only. OAuth integrations (Reddit, Twitter, LinkedIn)
- * require Composio + Electron protocol.handle — deferred to v2.
+ * Fetch is zero-auth and always injected automatically — not listed here.
+ * V1: API-key-based. Reddit uses Composio (user connects account externally).
  */
 
 import type { AgentType, McpServerConfig } from './types'
@@ -95,6 +95,71 @@ export const INTEGRATION_DEFS: IntegrationDef[] = [
       command: 'npx',
       args: ['-y', 'exa-mcp-server'],
       env: { EXA_API_KEY: config['EXA_API_KEY'] ?? '' },
+    }),
+  },
+
+  // ── Marketing ─────────────────────────────────────────────────────────────
+  {
+    type: 'reddit',
+    label: 'Reddit',
+    description: 'Post to subreddits, monitor mentions, and engage in threads via Composio.',
+    docsUrl: 'https://composio.dev/tools/reddit',
+    agentTypes: ['marketing'],
+    fields: [
+      {
+        key: 'COMPOSIO_API_KEY',
+        label: 'Composio API Key',
+        placeholder: 'comp_…',
+        hint: 'app.composio.dev → API Keys. Then run: composio add reddit — to connect your Reddit account.',
+        secret: true,
+      },
+    ],
+    toMcpServer: (config) => ({
+      command: 'npx',
+      args: ['-y', '@composio-dev/mcp@latest', '--toolset', 'reddit'],
+      env: { COMPOSIO_API_KEY: config['COMPOSIO_API_KEY'] ?? '' },
+    }),
+  },
+  {
+    type: 'resend',
+    label: 'Resend',
+    description: 'Send outreach and transactional emails directly from the agent.',
+    docsUrl: 'https://resend.com/docs',
+    agentTypes: ['marketing'],
+    fields: [
+      {
+        key: 'RESEND_API_KEY',
+        label: 'Resend API Key',
+        placeholder: 're_…',
+        hint: 'resend.com → API Keys → Create API Key',
+        secret: true,
+      },
+    ],
+    toMcpServer: (config) => ({
+      command: 'npx',
+      args: ['-y', 'resend-mcp'],
+      env: { RESEND_API_KEY: config['RESEND_API_KEY'] ?? '' },
+    }),
+  },
+  {
+    type: 'stripe',
+    label: 'Stripe',
+    description: 'Pull MRR, churn, and customer data to ground marketing decisions in revenue reality.',
+    docsUrl: 'https://github.com/stripe/agent-toolkit',
+    agentTypes: ['marketing', 'ops'],
+    fields: [
+      {
+        key: 'STRIPE_SECRET_KEY',
+        label: 'Secret Key',
+        placeholder: 'sk_live_… or sk_test_…',
+        hint: 'dashboard.stripe.com → Developers → API Keys → Secret key',
+        secret: true,
+      },
+    ],
+    toMcpServer: (config) => ({
+      command: 'npx',
+      args: ['-y', '@stripe/mcp', '--tools=all'],
+      env: { STRIPE_SECRET_KEY: config['STRIPE_SECRET_KEY'] ?? '' },
     }),
   },
 
