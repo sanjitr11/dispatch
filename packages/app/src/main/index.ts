@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Notification } from 'electron'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { writeFile, readFile, mkdir, access, appendFile } from 'fs/promises'
@@ -115,7 +115,7 @@ async function main() {
   // No real tool-use work detected — exit without writing anything.
   if (!summary) process.exit(0)
 
-  const entry = today + ': ' + (summary as string)
+  const entry = today + ': ' + summary
   const hintPattern = '*(append: \`YYYY-MM-DD: [one-line summary of what was done]\`)*'
   let updated
   if (sessionLogIdx !== -1) {
@@ -334,6 +334,13 @@ function createWindow(): void {
     const ptyProcess = ptyMap.get(opts.projectId)
     if (ptyProcess) {
       ptyProcess.resize(opts.cols, opts.rows)
+    }
+  })
+
+  // ── System notification ───────────────────────────────────────────────────────
+  ipcMain.on('app:notify', (_event, opts: { title: string; body: string }) => {
+    if (Notification.isSupported()) {
+      new Notification({ title: opts.title, body: opts.body }).show()
     }
   })
 

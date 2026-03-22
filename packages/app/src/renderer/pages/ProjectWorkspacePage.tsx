@@ -36,6 +36,8 @@ export default function ProjectWorkspacePage() {
   const [openedAgentIds, setOpenedAgentIds] = useState<Set<string>>(new Set())
   const [agentStatuses, setAgentStatuses] = useState<Record<string, TerminalStatus>>({})
   const [unreadAgentIds, setUnreadAgentIds] = useState<Set<string>>(new Set())
+  const [readyAgentIds, setReadyAgentIds] = useState<Set<string>>(new Set())
+  const [confirmLeave, setConfirmLeave] = useState(false)
   const [splitAgentId, setSplitAgentId] = useState<string | null>(null)
   const [taskInput, setTaskInput] = useState('')
   const [routeReason, setRouteReason] = useState<string | null>(null)
@@ -57,15 +59,16 @@ export default function ProjectWorkspacePage() {
   function selectAgent(agentId: string) {
     setActiveAgentId(agentId)
     setOpenedAgentIds((prev) => new Set([...prev, agentId]))
-    setUnreadAgentIds((prev) => {
-      const next = new Set(prev)
-      next.delete(agentId)
-      return next
-    })
+    setUnreadAgentIds((prev) => { const next = new Set(prev); next.delete(agentId); return next })
+    setReadyAgentIds((prev) => { const next = new Set(prev); next.delete(agentId); return next })
   }
 
   function handleStatusChange(agentId: string, status: TerminalStatus) {
     setAgentStatuses((prev) => ({ ...prev, [agentId]: status }))
+  }
+
+  function handleAgentReady(agentId: string) {
+    setReadyAgentIds((prev) => new Set([...prev, agentId]))
   }
 
   function handleUnreadOutput(agentId: string) {
@@ -98,6 +101,15 @@ export default function ProjectWorkspacePage() {
     if (routeReasonTimer.current) clearTimeout(routeReasonTimer.current)
     setRouteReason(result.reason)
     routeReasonTimer.current = setTimeout(() => setRouteReason(null), 4000)
+  }
+
+  function handleBackToProjects() {
+    const hasRunning = Object.values(agentStatuses).some((s) => s === 'running' || s === 'starting')
+    if (hasRunning) {
+      setConfirmLeave(true)
+    } else {
+      navigate('/projects')
+    }
   }
 
   async function handleLinkFolder() {
@@ -140,17 +152,17 @@ export default function ProjectWorkspacePage() {
   const activeAgent = agents.find((a) => a.id === activeAgentId) ?? null
 
   return (
-    <div className="flex h-screen bg-bg-base overflow-hidden">
+    <div className="relative flex h-screen bg-bg-base overflow-hidden">
       {/* ── Sidebar ── */}
       <div className="w-52 flex flex-col bg-bg-base border-r border-border shrink-0">
         {/* Back + project header */}
         <div className="px-3 pt-3 pb-3 border-b border-border space-y-3">
-          <Link
-            to="/projects"
-            className="text-xs text-text-muted hover:text-text-secondary transition-colors block"
+          <button
+            onClick={handleBackToProjects}
+            className="text-xs text-text-muted hover:text-text-secondary transition-colors block text-left"
           >
             ← Projects
-          </Link>
+          </button>
           <div className="text-sm font-semibold text-text-primary truncate">
             {project.startup_name}
           </div>
@@ -205,6 +217,7 @@ export default function ProjectWorkspacePage() {
               const isSplit = agent.id === splitAgentId
               const status = agentStatuses[agent.id]
               const hasUnread = unreadAgentIds.has(agent.id)
+              const isReady = readyAgentIds.has(agent.id)
               const dotColor = status ? STATUS_DOT[status] : 'text-text-muted'
 
               return (
@@ -229,8 +242,11 @@ export default function ProjectWorkspacePage() {
                     )}
                     <span className="text-xs truncate">{agent.name}</span>
                   </button>
-                  {hasUnread && (
-                    <span className="w-2 h-2 rounded-full bg-agent-coding shrink-0" title="Unread output" />
+                  {isReady && (
+                    <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0 animate-pulse" title="Ready" />
+                  )}
+                  {!isReady && hasUnread && (
+                    <span className="w-2 h-2 rounded-full bg-text-muted/40 shrink-0" title="Unread output" />
                   )}
                   {activeAgentId && !isActive && (
                     <button
@@ -275,6 +291,32 @@ export default function ProjectWorkspacePage() {
           </Link>
         </div>
       </div>
+
+      {/* ── Leave confirmation overlay ── */}
+      {confirmLeave && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-bg-subtle border border-border rounded-xl shadow-lg p-6 w-80 space-y-4">
+            <h2 className="text-sm font-semibold text-text-primary">Leave workspace?</h2>
+            <p className="text-sm text-text-secondary leading-relaxed">
+              You have active agent sessions running. Leaving will terminate all of them.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setConfirmLeave(false)}
+                className="text-sm px-3 py-1.5 rounded border border-border text-text-secondary hover:text-text-primary transition-colors"
+              >
+                Stay
+              </button>
+              <button
+                onClick={() => navigate('/projects')}
+                className="text-sm px-3 py-1.5 rounded bg-error text-white hover:opacity-80 transition-opacity font-medium"
+              >
+                Leave & terminate
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Main panel ── */}
       <div className="flex flex-col flex-1 min-w-0">
@@ -391,6 +433,7 @@ export default function ProjectWorkspacePage() {
                     className={inSplit ? 'flex-1' : 'w-full'}
                     onStatusChange={handleStatusChange}
                     onUnreadOutput={handleUnreadOutput}
+                    onReady={handleAgentReady}
                   />
                 )
               })}

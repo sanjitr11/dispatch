@@ -60,4 +60,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('terminal:exit', handler)
     return () => ipcRenderer.removeListener('terminal:exit', handler)
   },
+
+  // Send a system notification (only shown when the window is not focused)
+  notify: (title: string, body: string): void =>
+    ipcRenderer.send('app:notify', { title, body }),
 })

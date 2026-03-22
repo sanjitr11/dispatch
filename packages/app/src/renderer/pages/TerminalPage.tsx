@@ -21,6 +21,7 @@ declare global {
       terminalKill: (projectId: string) => void
       onTerminalOutput: (projectId: string, cb: (data: string) => void) => () => void
       onTerminalExit: (projectId: string, cb: () => void) => () => void
+      notify: (title: string, body: string) => void
     }
   }
 }

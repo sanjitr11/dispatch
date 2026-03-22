@@ -18,6 +18,7 @@ interface Props {
   className?: string
   onStatusChange: (agentId: string, status: TerminalStatus) => void
   onUnreadOutput: (agentId: string) => void
+  onReady: (agentId: string) => void
 }
 
 const DARK_THEME = {
@@ -42,6 +43,7 @@ export default function TerminalPanel({
   className,
   onStatusChange,
   onUnreadOutput,
+  onReady,
 }: Props) {
   const { theme } = useTheme()
   const terminalRef = useRef<HTMLDivElement>(null)
@@ -51,6 +53,10 @@ export default function TerminalPanel({
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [status, setStatus] = useState<TerminalStatus>('starting')
   const bootedRef = useRef(false)
+  // Notification detection
+  const wasWorkingRef = useRef(false)         // true after significant output received
+  const sessionActiveRef = useRef(false)      // true after first user input (skip startup noise)
+  const activityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Keep visibleRef in sync for use inside callbacks
   useEffect(() => {
@@ -166,14 +172,60 @@ export default function TerminalPanel({
 
       const { cols, rows } = term
 
-      // 5. Forward keystrokes
-      term.onData((data) => api.terminalInput(agent.id, data))
+      // 5. Forward keystrokes — activate session tracking on first submit
+      term.onData((data) => {
+        api.terminalInput(agent.id, data)
+        if (data === '\r') {
+          sessionActiveRef.current = true
+          wasWorkingRef.current = false
+          if (activityTimerRef.current) {
+            clearTimeout(activityTimerRef.current)
+            activityTimerRef.current = null
+          }
+        }
+      })
+
+      function maybeMarkReady() {
+        if (!visibleRef.current) {
+          onReady(agent.id)
+        }
+      }
 
       // 6. Subscribe to output
       const unsubOutput = api.onTerminalOutput(agent.id, (data) => {
         term.write(data)
-        if (!visibleRef.current) {
-          onUnreadOutput(agent.id)
+        if (!visibleRef.current) onUnreadOutput(agent.id)
+
+        // Only track after first user input — skip startup noise
+        if (!sessionActiveRef.current) return
+
+        // Bell character = Claude explicitly signalling it needs input
+        if (data.includes('\x07')) {
+          wasWorkingRef.current = false
+          if (activityTimerRef.current) {
+            clearTimeout(activityTimerRef.current)
+            activityTimerRef.current = null
+          }
+          maybeMarkReady()
+          return
+        }
+
+        // Track whether Claude is actively producing output
+        const stripped = data.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '').replace(/\r/g, '')
+        if (stripped.replace(/\s/g, '').length > 5) {
+          wasWorkingRef.current = true
+        }
+
+        // Silence for 3s after activity = Claude is done / waiting for next message
+        if (wasWorkingRef.current) {
+          if (activityTimerRef.current) clearTimeout(activityTimerRef.current)
+          activityTimerRef.current = setTimeout(() => {
+            activityTimerRef.current = null
+            if (wasWorkingRef.current) {
+              wasWorkingRef.current = false
+              maybeMarkReady()
+            }
+          }, 3000)
         }
       })
       const unsubExit = api.onTerminalExit(agent.id, () => {
@@ -184,6 +236,10 @@ export default function TerminalPanel({
       ;(termRef.current as any).__cleanup = () => {
         unsubOutput()
         unsubExit()
+        if (activityTimerRef.current) {
+          clearTimeout(activityTimerRef.current)
+          activityTimerRef.current = null
+        }
       }
 
       // 7. Start the pty — keyed by agentId
@@ -195,6 +251,7 @@ export default function TerminalPanel({
       if (autoCmd) {
         const slashCmd = autoCmd === 'sync' ? '/sync' : `/${autoCmd}`
         setTimeout(() => {
+          sessionActiveRef.current = true
           api.terminalInput(agent.id, `${slashCmd}\r`)
         }, 4000)
       }
