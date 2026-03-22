@@ -1,6 +1,6 @@
 # agent-env Roadmap
 
-_Last updated: 2026-03-20_
+_Last updated: 2026-03-21_
 
 ## Completed
 
@@ -70,3 +70,55 @@ CREATE POLICY "Users manage their own integrations"
 **V3 — OAuth-based (deferred):**
 - Twitter/X — $100/month API minimum, not worth it for solo founders
 - LinkedIn — API too restrictive, post-only, limited value
+
+---
+
+## Inter-Agent Communication
+
+**Status: Planned — post first-user feedback**
+**Dependency: validate demand with 10+ real users before building**
+
+Right now the founder is the communication bus between agents. When the coding agent
+discovers a constraint that changes the marketing message, the founder manually copies
+that context over. When the research agent finishes a competitor analysis, the ops agent
+doesn't know about it. Every cross-agent handoff is a manual step.
+
+Claude Code shipped native inter-agent messaging in February 2026 as **Agent Teams**
+(v2.1.32+, behind `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). The mechanism is plain
+JSON files on local disk — each agent gets an inbox at
+`~/.claude/teams/{team}/inboxes/{name}.json`. Agents send messages via `TeammateTool`
+(`write` for direct, `broadcast` for all teammates); received messages arrive
+automatically as new conversation turns — no polling. A shared task queue at
+`~/.claude/tasks/{team}/` handles work coordination with file-locking to prevent
+double-claiming.
+
+For agent-env specifically, this changes the product from "four parallel isolated
+sessions the founder manually connects" to "a functioning team the founder assigns work
+to." The founder describes a goal once; the router assigns the lead agent; that agent
+delegates and coordinates the others; the founder reviews a result. The "Route a task…"
+input already exists — this is the layer that makes routing actually dispatch work
+rather than just suggest it.
+
+**What a founder would see:**
+- A task enters via "Route a task…" and the app selects a lead agent
+- The lead agent's terminal shows it delegating sub-tasks to other agents
+- A shared activity feed (or the existing split view) shows all agents' status in real time
+- Agents surface blockers and questions to the founder without requiring full attention
+
+**Implementation approach:**
+Build on top of Claude Code's Agent Teams — don't reinvent the transport. The key
+work is in agent-env: routing logic that creates a team instead of just switching the
+active terminal, a UI that surfaces cross-agent activity, and guardrails that keep
+the founder in control of high-stakes decisions (anything touching production,
+outbound communication, or irreversible actions).
+
+**Known limitations of Agent Teams to design around:**
+- No session resumption — `/resume`/`/rewind` don't restore teammates; teams are
+  session-scoped
+- `broadcast` is expensive — generates N context injections for N teammates
+- ~800k tokens for a 3-agent session vs ~200k solo — real cost consideration for founders
+- Not available in VS Code extension (bug #28048, still open)
+- One team per session; teammates cannot spawn their own teams
+- Cross-machine communication doesn't exist yet (GitHub issue #28300, open)
+
+See `docs/issues/inter-agent-comms.md` for open questions and community links.
