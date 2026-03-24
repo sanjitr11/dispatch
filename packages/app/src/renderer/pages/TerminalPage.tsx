@@ -22,6 +22,7 @@ declare global {
       onTerminalOutput: (projectId: string, cb: (data: string) => void) => () => void
       onTerminalExit: (projectId: string, cb: () => void) => () => void
       notify: (title: string, body: string) => void
+      clipboardReadImagePath: () => Promise<string | null>
     }
   }
 }
@@ -120,6 +121,25 @@ export default function TerminalPage() {
 
       // 5. Forward keystrokes
       term.onData((data) => api.terminalInput(ag.id, data))
+
+      // 5a. Clipboard paste: intercept Cmd+V / Ctrl+V to handle image paste
+      term.attachCustomKeyEventHandler((event) => {
+        if (event.type !== 'keydown') return true
+        const isPaste = (event.metaKey || event.ctrlKey) && event.key === 'v'
+        if (!isPaste) return true
+        ;(async () => {
+          const imgPath = await api.clipboardReadImagePath()
+          if (imgPath) {
+            api.terminalInput(ag.id, imgPath)
+          } else {
+            try {
+              const text = await navigator.clipboard.readText()
+              if (text) api.terminalInput(ag.id, text)
+            } catch { /* clipboard read failed */ }
+          }
+        })()
+        return false
+      })
 
       // 6. Subscribe to output
       const unsubOutput = api.onTerminalOutput(ag.id, (data) => term.write(data))
@@ -226,6 +246,15 @@ export default function TerminalPage() {
         className="flex-1 p-2"
         style={{ display: status === 'error' ? 'none' : 'block' }}
         onClick={() => termRef.current?.focus()}
+        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
+        onDrop={(e) => {
+          e.preventDefault()
+          termRef.current?.focus()
+          Array.from(e.dataTransfer.files).forEach((file) => {
+            const filePath = (file as any).path as string | undefined
+            if (filePath && agentId) window.electronAPI.terminalInput(agentId, filePath)
+          })
+        }}
       />
     </div>
   )

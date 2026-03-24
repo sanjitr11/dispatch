@@ -1,7 +1,8 @@
-import { app, BrowserWindow, ipcMain, dialog, Notification } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Notification, systemPreferences, clipboard } from 'electron'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { writeFile, readFile, mkdir, access, appendFile } from 'fs/promises'
+import { tmpdir } from 'os'
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import * as pty from 'node-pty'
@@ -181,6 +182,24 @@ function createWindow(): void {
     win.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
+  // ── Media permissions (microphone for Claude Code voice mode) ────────────────
+  win.webContents.session.setPermissionRequestHandler((_webContents, permission, callback) => {
+    if (permission === 'media' || permission === 'microphone') {
+      callback(true)
+    } else {
+      callback(false)
+    }
+  })
+
+  // ── Clipboard: save image to temp file, return path (or null if no image) ────
+  ipcMain.handle('clipboard:readImagePath', async () => {
+    const image = clipboard.readImage()
+    if (image.isEmpty()) return null
+    const tmpPath = join(tmpdir(), `dispatch-paste-${Date.now()}.png`)
+    await writeFile(tmpPath, image.toPNG())
+    return tmpPath
+  })
+
   // ── Dialog: pick a local folder ─────────────────────────────────────────────
   ipcMain.handle('dialog:openFolder', async () => {
     const result = await dialog.showOpenDialog(win, {
@@ -354,7 +373,11 @@ function createWindow(): void {
   })
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Request microphone access so Claude Code voice mode works in the spawned PTY process
+  if (process.platform === 'darwin') {
+    await systemPreferences.askForMediaAccess('microphone')
+  }
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

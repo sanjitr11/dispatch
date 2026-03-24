@@ -64,4 +64,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Send a system notification (only shown when the window is not focused)
   notify: (title: string, body: string): void =>
     ipcRenderer.send('app:notify', { title, body }),
+
+  // Read clipboard image; saves to a temp file and returns the path, or null if no image
+  clipboardReadImagePath: (): Promise<string | null> =>
+    ipcRenderer.invoke('clipboard:readImagePath'),
 })

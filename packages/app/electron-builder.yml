@@ -10,6 +10,8 @@ files:
 mac:
   category: public.app-category.developer-tools
   # TODO: add build/icon.icns for production releases
+  extendInfo:
+    NSMicrophoneUsageDescription: "Dispatch needs microphone access for Claude Code voice mode."
   target:
     - target: dmg
       arch:

@@ -185,6 +185,29 @@ export default function TerminalPanel({
         }
       })
 
+      // 5a. Clipboard paste: intercept Cmd+V / Ctrl+V to handle image paste
+      //     If clipboard has an image, inject the saved temp file path.
+      //     Otherwise fall back to reading clipboard text ourselves so we stay in control.
+      term.attachCustomKeyEventHandler((event) => {
+        if (event.type !== 'keydown') return true
+        const isPaste = (event.metaKey || event.ctrlKey) && event.key === 'v'
+        if (!isPaste) return true
+        // Take full ownership of paste so image and text branches don't race
+        ;(async () => {
+          const imgPath = await api.clipboardReadImagePath()
+          if (imgPath) {
+            sessionActiveRef.current = true
+            api.terminalInput(agent.id, imgPath)
+          } else {
+            try {
+              const text = await navigator.clipboard.readText()
+              if (text) api.terminalInput(agent.id, text)
+            } catch { /* clipboard read failed — nothing to paste */ }
+          }
+        })()
+        return false // prevent xterm from also handling this keypress
+      })
+
       function maybeMarkReady() {
         if (!visibleRef.current) {
           onReady(agent.id)
@@ -271,6 +294,26 @@ export default function TerminalPanel({
     }
   }
 
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length === 0) return
+    termRef.current?.focus()
+    // Inject each file path — Electron augments File with an absolute .path property
+    for (const file of files) {
+      const filePath = (file as any).path as string | undefined
+      if (filePath) {
+        sessionActiveRef.current = true
+        window.electronAPI.terminalInput(agent.id, filePath)
+      }
+    }
+  }
+
   return (
     <div className={`flex flex-col h-full ${className ?? ''}`} style={{ display: visible ? 'flex' : 'none' }}>
       {status === 'error' ? (
@@ -282,6 +325,8 @@ export default function TerminalPanel({
           className="flex flex-col flex-1"
           style={{ background: theme === 'dark' ? DARK_THEME.background : LIGHT_THEME.background, padding: '8px 12px' }}
           onClick={() => termRef.current?.focus()}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
         >
           <div ref={terminalRef} className="flex-1" />
         </div>
