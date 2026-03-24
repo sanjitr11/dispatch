@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { OAuthButtons } from '../components/OAuthButtons'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -30,6 +31,14 @@ export default function LoginPage() {
         <div className="text-center">
           <h1 className="text-2xl font-semibold text-text-primary">Dispatch</h1>
           <p className="text-sm text-text-muted mt-1">Sign in to your account</p>
+        </div>
+
+        <OAuthButtons onError={setError} />
+
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-px bg-border" />
+          <span className="text-xs text-text-muted">or</span>
+          <div className="flex-1 h-px bg-border" />
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

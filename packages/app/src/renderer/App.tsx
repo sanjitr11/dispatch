@@ -1,5 +1,7 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { useEffect } from 'react'
 import { ThemeProvider } from './components/ThemeProvider'
+import { supabase } from './lib/supabase'
 import { ThemeToggle } from './components/ThemeToggle'
 import AuthGuard from './components/AuthGuard'
 import LoginPage from './pages/LoginPage'
@@ -12,10 +14,35 @@ import AgentDetailPage from './pages/AgentDetailPage'
 import TerminalPage from './pages/TerminalPage'
 import EditProjectPage from './pages/EditProjectPage'
 
+function OAuthCallbackHandler() {
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    const api = (window as any).electronAPI
+    if (!api?.onAuthCallback) return
+
+    const unsub = api.onAuthCallback(async (url: string) => {
+      // Extract the `code` query param from the deep-link URL
+      // e.g. dispatch://auth/callback?code=XXXX
+      const parsed = new URL(url)
+      const code = parsed.searchParams.get('code')
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code)
+        if (!error) navigate('/projects')
+      }
+    })
+
+    return unsub
+  }, [navigate])
+
+  return null
+}
+
 export default function App() {
   return (
     <ThemeProvider>
       <>
+        <OAuthCallbackHandler />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />

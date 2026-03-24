@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { OAuthButtons } from '../components/OAuthButtons'
 
 export default function SignupPage() {
   const navigate = useNavigate()
@@ -41,6 +42,15 @@ export default function SignupPage() {
             {message}
           </div>
         ) : (
+          <>
+          <OAuthButtons onError={setError} />
+
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-px bg-border" />
+            <span className="text-xs text-text-muted">or</span>
+            <div className="flex-1 h-px bg-border" />
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-text-secondary mb-1">Email</label>
@@ -77,6 +87,7 @@ export default function SignupPage() {
               {loading ? 'Creating account...' : 'Create account'}
             </button>
           </form>
+          </>
         )}
 
         <p className="text-sm text-center text-text-secondary">

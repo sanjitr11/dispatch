@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Notification, systemPreferences, clipboard } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Notification, systemPreferences, clipboard, shell } from 'electron'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { writeFile, readFile, mkdir, access, appendFile } from 'fs/promises'
@@ -165,6 +165,36 @@ const CLAUDE_SETTINGS = {
 // Active pty processes keyed by projectId
 const ptyMap = new Map<string, pty.IPty>()
 
+// Module-level window reference so OAuth deep-link handlers can reach the renderer
+let mainWindow: BrowserWindow | null = null
+
+// Register dispatch:// as a custom protocol for OAuth callbacks.
+// Works in packaged builds; in dev on macOS the app bundle is required.
+app.setAsDefaultProtocolClient('dispatch')
+
+// macOS: deep link arrives via open-url event
+app.on('open-url', (event, url) => {
+  event.preventDefault()
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('auth:callback', url)
+    mainWindow.focus()
+  }
+})
+
+// Windows / Linux: second-instance argv contains the deep-link URL
+const gotLock = app.requestSingleInstanceLock()
+if (!gotLock) {
+  app.quit()
+}
+app.on('second-instance', (_event, argv) => {
+  const url = argv.find((arg) => arg.startsWith('dispatch://'))
+  if (url && mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('auth:callback', url)
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.focus()
+  }
+})
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1200,
@@ -176,11 +206,19 @@ function createWindow(): void {
     },
   })
 
+  mainWindow = win
+  win.on('closed', () => { mainWindow = null })
+
   if (process.env['ELECTRON_RENDERER_URL']) {
     win.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
     win.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  // ── Open a URL in the system browser (used for OAuth flows) ──────────────────
+  ipcMain.handle('shell:openExternal', (_event, url: string) => {
+    shell.openExternal(url)
+  })
 
   // ── Media permissions (microphone for Claude Code voice mode) ────────────────
   win.webContents.session.setPermissionRequestHandler((_webContents, permission, callback) => {

@@ -68,4 +68,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Read clipboard image; saves to a temp file and returns the path, or null if no image
   clipboardReadImagePath: (): Promise<string | null> =>
     ipcRenderer.invoke('clipboard:readImagePath'),
+
+  // Open a URL in the system browser (used for OAuth deep-link flows)
+  openExternal: (url: string): Promise<void> =>
+    ipcRenderer.invoke('shell:openExternal', url),
+
+  // Subscribe to OAuth callback deep-link URLs -- returns an unsubscribe function
+  onAuthCallback: (callback: (url: string) => void): (() => void) => {
+    const handler = (_: unknown, url: string) => callback(url)
+    ipcRenderer.on('auth:callback', handler)
+    return () => ipcRenderer.removeListener('auth:callback', handler)
+  },
 })
